@@ -1,7 +1,8 @@
+import glob
 import json
 import os
 import time
-import glob
+
 from curl_cffi import requests
 
 URL_CANVAS = 'https://intra.land/api/pixel/canvas?campus=Heilbronn'
@@ -15,9 +16,9 @@ START_Y = 90
 
 SAFE_ZONES = [
     ((2, 20), (30, 47)),
-    ((84, 94), (110, 118))
-    ((33,76), (37,83))
-    ((48,93), (48,93))
+    ((84, 94), (110, 118)),
+    ((33, 76), (37, 83)),
+    ((48, 93), (48, 93)),
 ]
 
 DRAWINGS = [
