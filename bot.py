@@ -96,7 +96,7 @@ def get_current_canvas(cookie_string):
 def find_mismatches(board):
     """Compares the map, ignores safe zones, and sorts from the center."""
     targets = []
-    for y in range(HEIGHT):
+    for y in range(88, 93):
         for x in range(WIDTH):
             if is_in_safe_zone(x, y):
                 continue
@@ -153,6 +153,8 @@ def main():
 
     if not targets:
         print("The flag and drawings are perfect!")
+        import subprocess
+        subprocess.run(["python", "bot_planned.py"])
         return
 
     target_index = 0
