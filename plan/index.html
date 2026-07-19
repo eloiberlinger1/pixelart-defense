@@ -22,10 +22,13 @@
     <div class="container">
         <div>
             <div class="zoom-controls">
+                <button class="action" onclick="setZoom(0.5)">0.5x</button>
                 <button class="action" onclick="setZoom(1)">1x</button>
                 <button class="action" onclick="setZoom(2)">2x</button>
                 <button class="action" onclick="setZoom(4)">4x</button>
                 <button class="action" onclick="setZoom(8)">8x</button>
+                <button class="action" onclick="setZoom(16)">16x</button>
+                <button class="action" onclick="setZoom(32)">32x</button>
             </div>
             <br>
             <div style="overflow: auto; max-width: 800px; max-height: 800px; border: 1px solid #444;">
@@ -36,8 +39,12 @@
             <h3>Palette</h3>
             <div class="palette" id="palette"></div>
             <button class="action" onclick="exportPlan()">Export plan.json</button>
+            <button class="action" onclick="undo()">Undo Last Pixel</button>
             <button class="action" onclick="fetchCanvas()">Refresh Canvas</button>
             <div id="status">Loading...</div>
+            
+            <h3>JSON Preview</h3>
+            <pre id="json-preview" style="background: #111; padding: 10px; border-radius: 4px; max-height: 200px; overflow: auto; font-size: 12px;">[]</pre>
         </div>
     </div>
 
@@ -58,6 +65,8 @@
         
         let canvasData = new Uint8Array(WIDTH * HEIGHT);
         let plannedPixels = {}; 
+        let history = [];
+
         let selectedColor = 1;
         let zoom = 1;
         let isDrawing = false;
@@ -122,14 +131,51 @@
             ctx.putImageData(imgData, 0, 0);
         }
 
+        function updatePreview() {
+            const plan = [];
+            for (const key in plannedPixels) {
+                const [x, y] = key.split(",").map(Number);
+                plan.push({ x, y, color: plannedPixels[key] });
+            }
+            document.getElementById("json-preview").innerText = JSON.stringify(plan, null, 2);
+            return plan;
+        }
+
+        function setPixel(x, y, colorId) {
+            const key = `${x},${y}`;
+            const oldVal = plannedPixels[key];
+            if (oldVal === colorId) return; // No change
+
+            if (colorId === undefined) {
+                delete plannedPixels[key];
+            } else {
+                plannedPixels[key] = colorId;
+            }
+
+            history.push({ key, oldVal, newVal: colorId });
+            renderCanvas();
+            updatePreview();
+        }
+
+        function undo() {
+            if (history.length === 0) return;
+            const lastAction = history.pop();
+            if (lastAction.oldVal === undefined) {
+                delete plannedPixels[lastAction.key];
+            } else {
+                plannedPixels[lastAction.key] = lastAction.oldVal;
+            }
+            renderCanvas();
+            updatePreview();
+        }
+
         function drawPixel(evt) {
             const rect = canvas.getBoundingClientRect();
             const x = Math.floor((evt.clientX - rect.left) / zoom);
             const y = Math.floor((evt.clientY - rect.top) / zoom);
             
             if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
-                plannedPixels[`${x},${y}`] = selectedColor;
-                renderCanvas();
+                setPixel(x, y, selectedColor);
             }
         }
 
@@ -152,16 +198,11 @@
             const rect = canvas.getBoundingClientRect();
             const x = Math.floor((e.clientX - rect.left) / zoom);
             const y = Math.floor((e.clientY - rect.top) / zoom);
-            delete plannedPixels[`${x},${y}`];
-            renderCanvas();
+            setPixel(x, y, undefined);
         });
 
         function exportPlan() {
-            const plan = [];
-            for (const key in plannedPixels) {
-                const [x, y] = key.split(",").map(Number);
-                plan.push({ x, y, color: plannedPixels[key] });
-            }
+            const plan = updatePreview();
             const blob = new Blob([JSON.stringify(plan, null, 2)], { type: "application/json" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
