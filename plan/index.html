@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Planner</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #222; color: #fff; margin: 0; padding: 20px; }
+        .container { display: flex; gap: 20px; }
+        #canvas { border: 1px solid #555; cursor: crosshair; image-rendering: pixelated; }
+        .palette { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+        .color-btn { width: 30px; height: 30px; border: 2px solid transparent; cursor: pointer; border-radius: 4px; }
+        .color-btn.selected { border-color: #fff; }
+        .controls { display: flex; flex-direction: column; gap: 10px; }
+        button.action { padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button.action:hover { background: #0056b3; }
+        .zoom-controls { display: flex; gap: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Pixel Planner</h1>
+    <div class="container">
+        <div>
+            <div class="zoom-controls">
+                <button class="action" onclick="setZoom(1)">1x</button>
+                <button class="action" onclick="setZoom(2)">2x</button>
+                <button class="action" onclick="setZoom(4)">4x</button>
+                <button class="action" onclick="setZoom(8)">8x</button>
+            </div>
+            <br>
+            <div style="overflow: auto; max-width: 800px; max-height: 800px; border: 1px solid #444;">
+                <canvas id="canvas" width="128" height="128" style="width: 128px; height: 128px;"></canvas>
+            </div>
+        </div>
+        <div class="controls">
+            <h3>Palette</h3>
+            <div class="palette" id="palette"></div>
+            <button class="action" onclick="exportPlan()">Export plan.json</button>
+            <button class="action" onclick="fetchCanvas()">Refresh Canvas</button>
+            <div id="status">Loading...</div>
+        </div>
+    </div>
+
+    <script>
+        const WIDTH = 128;
+        const HEIGHT = 128;
+        
+        const COLORS = [
+            "#1A1B26", "#FFFFFF", "#D8DEE9", "#9AA5CE",
+            "#565F89", "#24283B", "#000000", "#F7768E",
+            "#FF9E64", "#E0AF68", "#CFC9C2", "#9ECE6A",
+            "#73DACA", "#41A6B5", "#7DCFFF", "#7AA2F7",
+            "#BB9AF7", "#C0CAF5", "#FF5555", "#FFB86C",
+            "#F1FA8C", "#50FA7B", "#8BE9FD", "#BD93F9",
+            "#FF79C6", "#6272A4", "#44475A", "#2D2A2E",
+            "#A3BE8C", "#B48EAD", "#88C0D0", "#5E81AC"
+        ];
+        
+        let canvasData = new Uint8Array(WIDTH * HEIGHT);
+        let plannedPixels = {}; 
+        let selectedColor = 1;
+        let zoom = 1;
+        let isDrawing = false;
+
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        const statusEl = document.getElementById("status");
+
+        function initPalette() {
+            const paletteEl = document.getElementById("palette");
+            COLORS.forEach((color, idx) => {
+                const btn = document.createElement("div");
+                btn.className = "color-btn" + (idx === selectedColor ? " selected" : "");
+                btn.style.backgroundColor = color;
+                btn.onclick = () => {
+                    document.querySelectorAll(".color-btn").forEach(b => b.classList.remove("selected"));
+                    btn.classList.add("selected");
+                    selectedColor = idx;
+                };
+                paletteEl.appendChild(btn);
+            });
+        }
+
+        function setZoom(level) {
+            zoom = level;
+            canvas.style.width = (WIDTH * zoom) + "px";
+            canvas.style.height = (HEIGHT * zoom) + "px";
+        }
+
+        async function fetchCanvas() {
+            statusEl.innerText = "Loading canvas...";
+            try {
+                const res = await fetch("/api/canvas");
+                if (!res.ok) throw new Error("Failed to fetch");
+                const buffer = await res.arrayBuffer();
+                canvasData = new Uint8Array(buffer);
+                renderCanvas();
+                statusEl.innerText = "Canvas loaded.";
+            } catch (err) {
+                statusEl.innerText = "Error: " + err.message;
+            }
+        }
+
+        function renderCanvas() {
+            const imgData = ctx.createImageData(WIDTH, HEIGHT);
+            for (let i = 0; i < WIDTH * HEIGHT; i++) {
+                let colorId = canvasData[i];
+                
+                const x = i % WIDTH;
+                const y = Math.floor(i / WIDTH);
+                if (plannedPixels[`${x},${y}`] !== undefined) {
+                    colorId = plannedPixels[`${x},${y}`];
+                }
+
+                const colorStr = COLORS[colorId] || "#000000";
+                const hex = colorStr.replace("#", "");
+                imgData.data[i * 4] = parseInt(hex.substring(0, 2), 16);
+                imgData.data[i * 4 + 1] = parseInt(hex.substring(2, 4), 16);
+                imgData.data[i * 4 + 2] = parseInt(hex.substring(4, 6), 16);
+                imgData.data[i * 4 + 3] = 255;
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function drawPixel(evt) {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((evt.clientX - rect.left) / zoom);
+            const y = Math.floor((evt.clientY - rect.top) / zoom);
+            
+            if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+                plannedPixels[`${x},${y}`] = selectedColor;
+                renderCanvas();
+            }
+        }
+
+        canvas.addEventListener("mousedown", (e) => { 
+            if (e.button === 0) {
+                isDrawing = true; 
+                drawPixel(e); 
+            }
+        });
+        canvas.addEventListener("mousemove", (e) => { 
+            if (isDrawing && e.button === 0) drawPixel(e); 
+        });
+        canvas.addEventListener("mouseup", (e) => { 
+            if (e.button === 0) isDrawing = false; 
+        });
+        canvas.addEventListener("mouseleave", () => { isDrawing = false; });
+        
+        canvas.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / zoom);
+            const y = Math.floor((e.clientY - rect.top) / zoom);
+            delete plannedPixels[`${x},${y}`];
+            renderCanvas();
+        });
+
+        function exportPlan() {
+            const plan = [];
+            for (const key in plannedPixels) {
+                const [x, y] = key.split(",").map(Number);
+                plan.push({ x, y, color: plannedPixels[key] });
+            }
+            const blob = new Blob([JSON.stringify(plan, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "plan.json";
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        initPalette();
+        fetchCanvas();
+        setZoom(4);
+    </script>
+</body>
+</html>
