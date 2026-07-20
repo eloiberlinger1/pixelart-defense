@@ -154,7 +154,8 @@ def main():
     if not targets:
         print("The flag and drawings are perfect!")
         import subprocess
-        subprocess.run(["python", "bot_planned.py"])
+        import sys
+        subprocess.run([sys.executable, "bot_planned.py"])
         return
 
     target_index = 0
